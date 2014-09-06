@@ -42,7 +42,7 @@ public class Lamport {
 		Date date = new Date();
 		SimpleDateFormat sdf = new SimpleDateFormat("MM/dd/yyyy h:mm:ss a : ");
 		String formattedDate = sdf.format(date);
-		return formattedDate; // 12/01/2011 4:48:16 PM
+		return formattedDate; // 09/01/2014 4:48:16 PM
 	}
 
 
