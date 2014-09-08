@@ -22,6 +22,8 @@ public class Lamport {
 
 
 
+
+
 	/* generateUpdate: This method takes in a handle to a Random() obj
 	 * and returns an array of 2 ints representing new update value
 	 */
@@ -33,6 +35,8 @@ public class Lamport {
 		//System.out.println(getTimestamp() + "[App] Generated random update: " + update[0] + " " + update[1]);
 		return update;
 	}
+
+
 
 
 
@@ -49,7 +53,7 @@ public class Lamport {
 
 
 
-	public static void main (String argv[]) throws Exception {
+	public static void main (String argv[]) {
 		
 		/* parse the commandline first */
 		pid = Integer.parseInt(argv[0]);
@@ -60,9 +64,16 @@ public class Lamport {
 		FileWriter f = null;
 		BufferedWriter out = null;
 		LogWriter logger = null;
-		f = new FileWriter(filename);
-		out = new BufferedWriter(f);
-		logger = new LogWriter(out);
+		try {
+			f = new FileWriter(filename);
+			out = new BufferedWriter(f);
+			logger = new LogWriter(out);
+			
+		} catch (IOException e) {
+			System.err.println(getTimestamp() + "[ERROR] Could not open log file");
+			e.printStackTrace();
+			return;
+		}
 		curr = new CurrencyValue(logger);
 
 		/* Now we need an object for middleware which will start the lamport
@@ -96,7 +107,11 @@ public class Lamport {
 					break;
 				}
 			}
-			Thread.sleep(2000);
+			try {
+				Thread.sleep(2000);
+			} catch (InterruptedException e) {
+				// nothing
+			}
 		}
 
 		Random r = new Random();
@@ -108,13 +123,19 @@ public class Lamport {
 
 			// sleep random amount of time
 			sleepTime = r.nextInt(1000);
-			Thread.sleep(sleepTime);
+			try {
+				Thread.sleep(sleepTime);
+			} catch (InterruptedException e) {
+				// nothing we can do except printing stack and ignoring.
+				System.err.println(getTimestamp() + "[ERROR] Unexpected interuption to the application");
+				e.printStackTrace();
+			}
 
 
 			// Now generate random update
 
 			int[] updateVal = generateUpdate(r);
-			Message m = new Message('u', 0.0, pid);
+			Message m = new Message('u',0.0,pid);
 			m.setUpdate(updateVal);
 
 			// put it in the queue
@@ -150,13 +171,21 @@ public class Lamport {
 				}
 
 			}
-			//System.out.println(getTimestamp() + "[App] Waiting for others to finish generating updates");
-			Thread.sleep(2000);
+			try {
+				//System.out.println(getTimestamp() + "[App] Waiting for others to finish generating updates");
+				Thread.sleep(2000);
+			} catch (InterruptedException e) {
+
+			}
 		}
 
 		//System.out.println(getTimestamp() + "Final currency value is [" + curr.getValue()[0] + "," + curr.getValue()[1] + "]");
 		logger.log("Final currency value is [" + curr.getValue()[0] + "," + curr.getValue()[1] + "]");
-		logger.closeLog();
-	}
+		try {
+			logger.closeLog();
+		} catch (IOException e) {
+			System.err.println(getTimestamp() + "[ERROR] Error closing the log file");
+		}
 
+	}
 }
