@@ -30,8 +30,8 @@ public class CurrencyValue {
 		}
 		sellRate += update[0];
 		buyRate += update[1];
-		// System.out.println(getTimestamp() + "[App-currency] Currency value is set to (" + sellRate + "," + buyRate + ") by (" + update[0] + "," + update[1] + ")");
-		// logger.log("[App-currency][OP" + updateCounter + " : C" + t + "] Currency value is set to (" + sellRate + "," + buyRate + ") by (" + update[0] + "," + update[1] + ")");
+		//System.out.println(getTimestamp() + "[App-currency] Currency value is set to (" + sellRate + "," + buyRate + ") by (" + update[0] + "," + update[1] + ")");
+		//logger.log("[App-currency][OP" + updateCounter + " : C" + t + "] Currency value is set to (" + sellRate + "," + buyRate + ") by (" + update[0] + "," + update[1] + ")");
 		logger.log("[OP" + updateCounter + " : C" + t + "] Currency value is set to (" + sellRate + "," + buyRate + ") by (" + update[0] + "," + update[1] + ")");
 		updateCounter++;
 		return;
