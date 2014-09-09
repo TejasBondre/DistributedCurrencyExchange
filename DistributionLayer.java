@@ -69,7 +69,7 @@ public class DistributionLayer implements Runnable {
 	 * sends the acknowledgments. It also takes the exit decision. Hence it is by and large the 
 	 * most important and the most complicated part of the whole system.
 	 */
-	public void run() throws Exception {
+	public void run() {
 		/* here we have to write the logic for creating TCP connections,
 		 * Managing the queue, sending messages to other peers and
 		 * deliver received messages to the main thread.
@@ -115,7 +115,11 @@ public class DistributionLayer implements Runnable {
 						break;
 					}
 				}
-				Thread.sleep(2000);
+				try {
+					Thread.sleep(2000);
+				} catch (InterruptedException e) {
+					// nothing
+				}
 			}
 		}
 		
@@ -131,7 +135,11 @@ public class DistributionLayer implements Runnable {
 						break;
 					}
 				}
-				Thread.sleep(2000);
+				try {
+					Thread.sleep(2000);
+				} catch (InterruptedException e) {
+					// nothing
+				}
 			}
 		}
 		/* Socket threads indicated that they are ready to function. Same thing is 
@@ -140,28 +148,28 @@ public class DistributionLayer implements Runnable {
 		 * ready to start functioning. Do this by sending a message that has sender set 
 		 * to -1. 
 		 */
-		mid2app.add(new Message('u', clock.getTime(), -1));
-
-
+		mid2app.add(new Message('u',clock.getTime(),-1));
+		
+		
 		// Part 2: Message handling and ordering
-
+		
 		/* Now is part 2 of the plan. This is related to message handling
 		 * We have to accept the messages from middleware and socket threads and put them
 		 * in the priority queue. We also need to send acknowledgments to appropriate 
 		 * processes. Then if all the acknowledgments for a message are received, we 
 		 * need to pop the message and give it to the application layer. 
 		 */
-
+		
 		while (true) {
-
+						
 			// first lets send all the messages in out outbound queue
-
+			
 			sendMessages(socketRunnables);
-
+			
 			// now check if we have received any new message
 			getMessages(socketRunnables);
-
-
+			
+			
 			/* Now the next step is, to check if head of the priority queue has all the
 			 * acknowledgments received. If so, then we will pop it and give it to the
 			 * application 
@@ -208,11 +216,21 @@ public class DistributionLayer implements Runnable {
 				app2mid.add(new Message('e',clock.getTime(),pid));
 				sendMessages(socketRunnables);
 				
-				/* other nodes may be overwhelmed. Give them decent amount of time to say "No" to our exit request. 
-				* Only thing to lose here is that we will wait a little longer. Thats OK.
-				*/ 
-				Thread.sleep(10000);		
-
+				// wait for it...
+				try {
+					Thread.sleep(10000);		/* other nodes may be overwhelmed. Give them decent amout of
+												 * time to say "No" to our exit request. Only thing to lose here
+												 * is that we will wait a little longer. Thats OK.
+												 */ 
+				} catch (InterruptedException e) {
+					/* If we are interrupted, maybe we did not give enough time for other threads to respond
+					 * Take no risks. Do one more interation.
+					 */
+					exitOk = false;
+					letExit = false;
+					Thread.currentThread().interrupt();
+					continue;
+				}
 				
 				// now check if anyone sent is a probbing message which will indicate that we need to wait
 				getMessages(socketRunnables);
@@ -277,7 +295,7 @@ public class DistributionLayer implements Runnable {
 	 * otherwise, we could come back and check more messages. Anyway...
 	 */
 
-	private void killSockets (SocketThread[] s, Thread[] t) throws Exception {
+	private void killSockets (SocketThread[] s, Thread[] t) {
 		// first, push all our pending messages out.
 		sendMessages(s);
 		
@@ -289,16 +307,24 @@ public class DistributionLayer implements Runnable {
 		 * then it will wait for us to pull that message and we will never do. so add some 
 		 * sleep.
 		 */
-		Thread.sleep(2000);							// this should be enough (?)
-
+		try {
+			Thread.sleep(2000);							// this should be enough (?)
+		} catch (InterruptedException e) {
+			System.err.println("[ERROR] Interrupted while waiting for socket threads");
+		}
 
 		// now check the messages we pulled
 		getMessages(s);
 
 
 		for (int i=0; i < s.length; i++) {
-			t[i].join();
-			System.out.println(getTimestamp() + "[Middleware] Thread " + i + " exited");
+			try {
+				t[i].join();
+				// System.out.println(getTimestamp() + "[Middleware] Thread " + i + " exited");
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+				System.err.println("[ERROR] Interrupted while waiting for socket thread to exit");
+			}
 		}
 		getMessages(s);
 	}
@@ -576,7 +602,7 @@ public class DistributionLayer implements Runnable {
 
 
 	/* setExitFlag: Sets exitFlag for this object */
-
+	
 	public void setExitFlag () {
 		exitFlag = true;
 	}
@@ -590,27 +616,37 @@ public class DistributionLayer implements Runnable {
 	 * It will connect to 'n' servers and return the array having sockets
 	 * to those servers.
 	 */
-	private Socket[] createClientSockets (int n) throws Exception {
+	private Socket[] createClientSockets (int n) {
 		Socket[] cliSocks = new Socket[n];
-
+		
 		/* open the file info.txt first
 		 */
 		FileReader f = null;
 		BufferedReader in = null;
-
-		f = new FileReader("info.txt");
-		in = new BufferedReader(f);
-
+		
+		try {
+			f = new FileReader("info.txt");
+			in = new BufferedReader(f);
+		} catch (IOException e) {
+			System.err.println(getTimestamp() + "[ERROR] Error opening the file info.txt");
+			e.printStackTrace();
+			return null;
+		}
+		
 		/* The logic behind pid is, every process having smaller last digit of ip
 		 * address will have smaller pid. So we need to get the our ip to compare
 		 * Here we take meaning of 'digit' as 'number' otherwise numbers like 9 and 10
 		 * will give us problem.
 		 */
 		String[] ipFields = null;
-
-		Socket s = new Socket("google.com", 80);
-		ipFields = s.getLocalAddress().getHostAddress().split("\\.");
-		s.close();
+		try {
+			Socket s = new Socket("google.com", 80);
+			ipFields = s.getLocalAddress().getHostAddress().split("\\.");
+			s.close();
+		} catch (Exception e) {
+			System.err.println(getTimestamp() + "[ERROR] Error while getting our own ip");
+			e.printStackTrace();
+		}
 		
 		int myIpLastDig = Integer.parseInt(ipFields[3]);
 		
@@ -620,35 +656,56 @@ public class DistributionLayer implements Runnable {
 		 */
 		String line;
 		int totalSockets = 0;
-
-		while ((line = in.readLine()) != null) {
-			String[] fields = line.split("\\s+");		// first part is ip, second is port
-			ipFields = fields[0].split("\\.");
-			
-			/* If this machine has last digit larger than us, then we
-			 * can skip this one.
-			 */
-			if (Integer.parseInt(ipFields[3]) >= myIpLastDig ) {
-				continue;
+		try {
+			while ((line = in.readLine()) != null) {
+				String[] fields = line.split("\\s+");		// first part is ip, second is port
+				ipFields = fields[0].split("\\.");
+				
+				/* If this machine has last digit larger than us, then we
+				 * can skip this one.
+				 */
+				if (Integer.parseInt(ipFields[3]) >= myIpLastDig ) {
+					continue;
+				}
+				
+				/* otherwise create a socket to this machine and put it in the array we will return */
+				
+				int numAttempts = 10;
+				int connFlag = 0;
+				while (connFlag < numAttempts) {
+					try {
+						cliSocks[totalSockets++] = new Socket(fields[0],Integer.parseInt(fields[1]));
+						break;
+					} catch (ConnectException ce) {
+						// probably server is not up.
+						connFlag++;
+						totalSockets--;
+						Thread.sleep(3000);
+						if (connFlag == 9) {
+							System.err.println("[ERROR] Server connection failed. Check if server is running");
+							in.close();
+							throw ce;
+						}
+					}
+				}
+				//System.out.println(getTimestamp() + "P" + pid + " is connected to (" + fields[0] + ")");
+				//logger.log("[Middleware] P" + pid + " is connected to (" + fields[0] + ":" + fields[1] +  ")");
+				logger.log("P" + pid + " is connected to (" + fields[0] + ":" + fields[1] +  ")");
 			}
 			
-			/* otherwise create a socket to this machine and put it in the array we will return */
-			
-			int numAttempts = 10;
-			int connFlag = 0;
-			while (connFlag < numAttempts) {
-				cliSocks[totalSockets++] = new Socket(fields[0],Integer.parseInt(fields[1]));
-				break;
+			in.close();
+			if ((totalSockets) != n ) {
+				System.err.println(getTimestamp() + "[ERROR] Connected to unexpected number of servers:" + totalSockets);
 			}
-			System.out.println(getTimestamp() + "P" + pid + " is connected to (" + fields[0] + ")");
-			logger.log("[Middleware] P" + pid + " is connected to (" + fields[0] + ":" + fields[1] +  ")");
+			
+			
+		} catch (IOException e) {
+			System.err.println(getTimestamp() + "[ERROR] Error reading the file info.txt");
+			e.printStackTrace();
+			return null;
+		} catch (InterruptedException ie) {
+			// nothing here
 		}
-		
-		in.close();
-		if ((totalSockets) != n ) {
-			System.err.println(getTimestamp() + "[ERROR] Connected to unexpected number of servers:" + totalSockets);
-		}
-
 		
 		//System.out.println(getTimestamp() + "[Middleware] Connected to " + totalSockets + " number of servers");
 		return cliSocks;
@@ -663,59 +720,84 @@ public class DistributionLayer implements Runnable {
 	 * accepting the connections on those.
 	 */
 	
-	private Socket[] createServerSockets (int num) throws Exception {
+	private Socket[] createServerSockets (int num) {
 		
 		FileReader f = null;
 		BufferedReader in = null;
 		ServerSocket s = null;
 		HashMap<String,Integer> ipHash = new HashMap<String,Integer>();
-
-		s = new ServerSocket(9746);
-		PriorityQueue<String> ipQ = new PriorityQueue<String>();
-		f = new FileReader("info.txt");
-		in = new BufferedReader(f);
-		String line;
-		while ( (line = in.readLine()) != null ) {
-			ipQ.add(line.split("\\s+")[0]);
-		}
-		in.close();
-		String connMsg = null;
-		for (int i = 0; ipQ.peek() != null ; i++) {
-			if (i == pid) {
-				//connMsg = "[Middleware] P" + pid + " (" + ipQ.peek() + ") is listening on port 9746";
-				connMsg = "P" + pid + " (" + ipQ.peek() + ") is listening on port 9746";
+		try {
+			s = new ServerSocket(9746);
+			PriorityQueue<String> ipQ = new PriorityQueue<String>();
+			f = new FileReader("info.txt");
+			in = new BufferedReader(f);
+			String line;
+			while ( (line = in.readLine()) != null ) {
+				ipQ.add(line.split("\\s+")[0]);
 			}
-			ipHash.put(ipQ.peek(), i);
-			logger.log("[P" + i + "] " + ipQ.poll());
+			in.close();
+			String connMsg = null;
+			for (int i = 0; ipQ.peek() != null ; i++) {
+				if (i == pid) {
+					//connMsg = "[Middleware] P" + pid + " (" + ipQ.peek() + ") is listening on port 9746";
+					connMsg = "P" + pid + " (" + ipQ.peek() + ") is listening on port 9746";
+				}
+				ipHash.put(ipQ.peek(), i);
+				logger.log("[P" + i + "] " + ipQ.poll());
+			}
+			logger.log(connMsg);
+			/* All this to print those useless and potentially wrong PIDs */
+			
+			
+			//System.out.println(getTimestamp() + "[Middleware] P" + pid + " (" + InetAddress.getLocalHost().toString() + ") is listening on port 9746");
+			//logger.log("[Middleware] P" + pid + " (" + InetAddress.getLocalHost().getHostAddress() + ") is listening on port 9746");
+			
+			
+			/* now open the file to print those pid and ip pair. The thing is that PID is given from command line. So it can be
+			 * very well be 15 or 15000. Still, as we need to print it before communication (as shown and required in sample logs)
+			 * lets assume they start with 0 and go sequentially.
+			 */
+			
+			
+		} catch (IOException e) {
+			System.err.println(getTimestamp() + "[ERROR] Could not listen to port 9746");
+			return null;
 		}
-		logger.log(connMsg);
-
-
-		/* All this to print those useless and potentially wrong PIDs */
-		System.out.println(getTimestamp() + "[Middleware] P" + pid + " (" + InetAddress.getLocalHost().toString() + ") is listening on port 9746");
-		logger.log("[Middleware] P" + pid + " (" + InetAddress.getLocalHost().getHostAddress() + ") is listening on port 9746");
-
-
-		/* now open the file to print those pid and ip pair. The thing is that PID is given from command line. So it can be
-		 * very well be 15 or 15000. Still, as we need to print it before communication (as shown and required in sample logs)
-		 * lets assume they start with 0 and go sequentially.
-		 */
-
-
+				
 		Socket[] servSocks = new Socket[num];
 		
 		for (int i=0; i < num; i++) {
-			/* Accept a connection and put the socket in the array. */
-			servSocks[i] = s.accept();
-			int b = i + 1;		// this is sad, but to display the message, I need (i+1). and I cant just put that expression in println.
-			System.out.println(getTimestamp() + "[Middleware] P" + pid + " is connected from "+ b + " process(es)");	// correct this message later
-			String c = servSocks[i].getInetAddress().toString().replace('/',' ').trim();
-			logger.log("[Middleware] P" + pid + " is connected from P"+ ipHash.get(c)+ " (" + c + ") process(es)");	// correct this message later
+			try {
+				/* Accept a connection and put the socket in the array. */
+				servSocks[i] = s.accept();
+				//int b = i + 1;		// this is sad, but to display the message, I need (i+1). and I cant just put that expression in println.
+				//System.out.println(getTimestamp() + "[Middleware] P" + pid + " is connected from "+ b + " process(es)");	// correct this message
+				String c = servSocks[i].getInetAddress().toString().replace('/',' ').trim();
+				//logger.log("[Middleware] P" + pid + " is connected from P"+ ipHash.get(c)+ " (" + c + ") process(es)");	// correct this message
+				logger.log("P" + pid + " is connected from P"+ ipHash.get(c)+ " (" + c + ")");	// correct this message
+			} catch (IOException e) {
+				System.err.println(getTimestamp() + "[ERROR] Accept failed");
+				e.printStackTrace();
+				try {
+					s.close();
+				} catch (IOException e1) {
+					System.err.println(getTimestamp() + "[ERROR] Could not close server socket");
+					e1.printStackTrace();
+					return null;
+				}
+				return null;
+			}
 		}
-
-		s.close();
-
-		System.out.println(getTimestamp() + "[Middleware] Done creating server sockets");
+		
+		try {
+			s.close();
+		} catch (IOException e) {
+			System.err.println(getTimestamp() + "[ERROR] Could not close server socket");
+			e.printStackTrace();
+		}
+		
+		
+		//System.out.println(getTimestamp() + "[Middleware] Done creating server sockets");
 		return servSocks;
 	}
 }
