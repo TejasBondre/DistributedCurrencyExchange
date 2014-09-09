@@ -14,10 +14,15 @@ public class LogWriter {
 		out = o;
 	}
 
-	public synchronized void log  (String message) throws Exception {
-		out.write(getTimestamp() + message);
-		out.newLine();
-		out.flush();
+	public synchronized void log  (String message) {
+		try {
+			out.write(getTimestamp() + message);
+			out.newLine();
+			out.flush();
+		} catch (IOException e) {
+			System.err.println("[ERROR] Error writing the log file");
+			e.printStackTrace();
+		}
 	}
 
 	private String getTimestamp() {
