@@ -39,7 +39,7 @@ public class LogicalClock {
 		if ( (newTime - Math.floor(newTime)) != appendTime ) {
 			newTime = Math.floor(newTime) + appendTime;
 		}
-		System.out.println(getTimestamp() + "[Middleware-clock] Adjusting clock to " + newTime);
+		//System.out.println(getTimestamp() + "[Middleware-clock] Adjusting clock to " + newTime);
 		currentTime = newTime;
 	}
 
