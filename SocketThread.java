@@ -80,7 +80,7 @@ public class SocketThread implements Runnable {
 	 * After receiving the exit message, the socket thread waits for middle ware
 	 * to pull the current messages and then exits.
 	 */
-	public void run() throws Exception {
+	public void run() {
 		
 		// Phase 1: Initialization
 		
@@ -96,37 +96,48 @@ public class SocketThread implements Runnable {
 		ObjectOutputStream oOut = null;
 		
 		/* First create streams on the socket so that we are good to go */
-
-		/* Create the output streams first. This is because the ObjectInputStream class
-		 * does a blocking read waiting for a header to be received. ObjectOutputStream
-		 * sends this header when created. Hence create output streams first. And yes,
-		 * flush them too.
-		 */
-		out = socket.getOutputStream();
-		oOut = new ObjectOutputStream(out);
-		oOut.flush();
-		in = socket.getInputStream();
-		oIn = new ObjectInputStream(in);
-		System.out.println("Done creating the streams on the socket");
-
-
-
+		try {
+			/* Create the output streams first. This is because the ObjectInputStream class
+			 * does a blocking read waiting for a header to be received. ObjectOutputStream
+			 * sends this header when created. Hence create output streams first. And yes,
+			 * flush them too.
+			 */
+			out = socket.getOutputStream();
+			oOut = new ObjectOutputStream(out);
+			oOut.flush();
+			in = socket.getInputStream();
+			oIn = new ObjectInputStream(in);
+			// System.out.println("Done creating the streams on the socket");
+			
+		} catch (IOException e) {
+			System.err.println(getTimestamp() + "[ERROR] IO Error while creating streams on socket");
+			e.printStackTrace();
+			return;
+		}
+		
+		
+		
 		/* The read of the sockets are default blocking. This means there is a possibility when
 		 * all the nodes are reading and no one is writing thus keeping the application dangling
 		 * in the limbo. Better set the timeout so that reads will timeout and we will have chance
 		 * to send any pending messages generated in that time.
 		 */
-		socket.setSoTimeout(1000);
+		try {
+			socket.setSoTimeout(1000);
+		} catch (SocketException e) {
+			System.err.println(getTimestamp() + "[ERROR] Error setting timeout for read");
+			e.printStackTrace();
+		}
 		
-
+		
 		/* now indicate the parent that we are ready to go. This works same as middleware-application
 		 * relationship.
 		 */
 		s2m.add(new Message('u',0.0,-1));
-
-
-
-
+		
+		
+		
+		
 		// Phase 2: Start working :)
 		
 		
@@ -145,17 +156,39 @@ public class SocketThread implements Runnable {
 			/* If we have a message from middleware, then send it
 			 */
 			while ((mo = m2s.poll()) != null) {
-				System.out.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Sending a '" + mo.getType() + "' Message stamped " + mo.getTimestamp() + " ack count " + mo.getAcks());
-				oOut.writeObject(mo);
-				oOut.flush();
+				try {
+					/*System.out.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Sending a '" + mo.getType() + "' Message stamped " + mo.getTimestamp() 
+							+ " ack count " + mo.getAcks());*/
+					oOut.writeObject(mo);
+					oOut.flush();
+		
+				
+				} catch (IOException e) {
+					System.err.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Error sending message");
+					e.printStackTrace();
+				}
 			}
 			
 			/* Else, listen on the port and accept the message object
 			 * then put it in the queue to middleware.
 			 */
-			mi = (Message) oIn.readObject();
-			System.out.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Received a '" + mi.getType() + "' Message stamped " + mi.getTimestamp());
+			try {
+				mi = (Message) oIn.readObject();
+				//System.out.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Received a '" + mi.getType() + "' Message stamped " + mi.getTimestamp());
 
+
+			} catch (ClassNotFoundException ce) {
+				System.err.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] No such class found: Message");
+				ce.printStackTrace();
+			} catch (SocketTimeoutException te) {
+				// nothing to do here. Its expected.
+			} catch (EOFException end) {
+				//System.err.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Received EOF on the socket");
+				return;
+			} catch (IOException ioe) {
+				System.err.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Error while reading Message from socket");
+				ioe.printStackTrace();
+			} 
 
 			// if we received something, then put it in the queue for middleware.
 			if (mi != null) {
@@ -168,16 +201,32 @@ public class SocketThread implements Runnable {
 				
 				// send all the out bound messages
 				while ( (mo = m2s.poll() ) != null) {
-					System.out.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Sending a '" + mo.getType() + "' Message stamped " + mo.getTimestamp() );
-					oOut.writeObject(mo);
+					try {
+						//System.out.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Sending a '" + mo.getType() + "' Message stamped " + mo.getTimestamp() );
+						oOut.writeObject(mo);
+			
+					
+					} catch (IOException e) {
+						System.err.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Error sending message");
+						e.printStackTrace();
+					}
 				}
 
-				socket.close();
+				try {
+					socket.close();
+				} catch (IOException e) {
+					System.err.println(getTimestamp() + "[ERROR] Error closing the socket");
+				}
+
 
 				// wait for the middle ware to pull the newly received messages. 
 				while (! s2m.isEmpty() ) {
-					System.out.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Waiting for middleware to pull messages");
-					Thread.sleep(2000);
+					try {
+						//System.out.println(getTimestamp() + "[Socket " + socket.getLocalPort() + "] Waiting for middleware to pull messages");
+						Thread.sleep(2000);
+					} catch (InterruptedException e) {
+						// nothing
+					}
 				}
 				// we are done. 
 				return;
